@@ -59,9 +59,14 @@ cp scripts/element_project.conf.example scripts/element_project.conf
 ├── src/
 │   ├── PluginProcessor.h/cpp   # Audio processing
 │   ├── PluginEditor.h/cpp      # UI editor
-│   └── components/
-│       └── brand/
-│           └── TopBar.h/cpp    # Top bar with logo
+│   ├── components/
+│   │   ├── brand/
+│   │   │   └── TopBar.h/cpp    # Top bar with logo
+│   │   ├── controls/           # UI controls (knobs, sliders, etc.)
+│   │   └── graphs/             # Visualizations (waveforms, spectrums)
+│   ├── data/                   # Data models and state
+│   ├── dsp/                    # DSP processing (filters, effects)
+│   └── utils/                  # Utilities and helpers
 ├── assets/
 │   └── images/
 │       └── logo.png            # Company logo

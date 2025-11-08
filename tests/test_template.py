@@ -82,6 +82,13 @@ def test_generated_files_exist(template_dir, temp_output_dir, default_context):
     assert (project_dir / "src" / "components" / "brand" / "TopBar.h").exists()
     assert (project_dir / "src" / "components" / "brand" / "TopBar.cpp").exists()
 
+    # Check suggested directory structure (with .gitkeep files)
+    assert (project_dir / "src" / "utils" / ".gitkeep").exists()
+    assert (project_dir / "src" / "data" / ".gitkeep").exists()
+    assert (project_dir / "src" / "dsp" / ".gitkeep").exists()
+    assert (project_dir / "src" / "components" / "controls" / ".gitkeep").exists()
+    assert (project_dir / "src" / "components" / "graphs" / ".gitkeep").exists()
+
     # Check scripts
     assert (project_dir / "scripts" / "element_dev.sh").exists()
     assert (project_dir / "scripts" / "element_project.conf.example").exists()
