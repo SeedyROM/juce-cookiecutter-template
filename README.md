@@ -93,4 +93,4 @@ This template was extracted from a JUCE plugin/project I've been working on rece
 
 ## License
 
-[Your License Here]
+Apache-2.0 License. See LICENSE file for details.
