@@ -24,6 +24,7 @@ _deps
 
 # IDE
 .vscode/
+!.vscode/c_cpp_properties.json
 .idea/
 *.code-workspace
 .DS_Store
