@@ -1,0 +1,18 @@
+{
+  "configurations": [
+    {
+      "name": "Debug",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "build/juce_binarydata_{{ cookiecutter.plugin_name }}Assets"
+      ],
+      "defines": [
+        "JucePlugin_Name=\"{{ cookiecutter.plugin_name }}\"",
+        "JucePlugin_Manufacturer=\"{{ cookiecutter.company_name }}\""
+      ],
+      "cppStandard": "c++{{ cookiecutter.cpp_standard }}",
+      "configurationProvider": "ms-vscode.cmake-tools"
+    }
+  ],
+  "version": 4
+}
