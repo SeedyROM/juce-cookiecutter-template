@@ -13,5 +13,9 @@
   "include_vst2": "yes",
   "include_vst3": "yes",
   "include_au": "yes",
-  "include_standalone": "yes"
+  "include_standalone": "yes",
+  "include_faust": "no",
+  "faust_dsp_name": "{{ cookiecutter.plugin_name_lowercase }}",
+  "faust_class_name": "{{ cookiecutter.plugin_name }}DSP",
+  "include_ci": "yes"
 }

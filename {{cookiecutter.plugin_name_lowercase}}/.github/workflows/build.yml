@@ -1,0 +1,159 @@
+name: Build Plugins
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - ".vscode/**"
+  pull_request:
+    branches: [main, master]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - ".vscode/**"
+
+env:
+  BUILD_TYPE: Release
+  PLUGIN_NAME: {{cookiecutter.plugin_name}}
+
+jobs:
+  build:
+    name: {% raw %}${{ matrix.name }}{% endraw %}
+    runs-on: {% raw %}${{ matrix.os }}{% endraw %}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-14
+            cmake_args: >-
+              -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+              -D{{cookiecutter.plugin_name | upper}}_FORMATS="VST3 AU Standalone"
+            artifact_name: {{cookiecutter.plugin_name}}-macOS
+            artifact_paths: |
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/AU
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+
+          - name: macOS-Legacy
+            os: macos-14
+            cmake_args: >-
+              -DCMAKE_OSX_ARCHITECTURES="x86_64"
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+              -D{{cookiecutter.plugin_name | upper}}_FORMATS="VST3 AU Standalone"
+            artifact_name: {{cookiecutter.plugin_name}}-macOS-Legacy
+            artifact_paths: |
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/AU
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+
+          - name: Windows
+            os: windows-latest
+            cmake_args: >-
+              -D{{cookiecutter.plugin_name | upper}}_FORMATS="VST3 Standalone"
+            artifact_name: {{cookiecutter.plugin_name}}-Windows
+            artifact_paths: |
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+
+          - name: Linux
+            os: ubuntu-latest
+            cmake_args: >-
+              -D{{cookiecutter.plugin_name | upper}}_FORMATS="VST3 Standalone"
+            artifact_name: {{cookiecutter.plugin_name}}-Linux
+            artifact_paths: |
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Linux needs ALSA, X11, GL, and other deps for JUCE
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libx11-dev \
+            libxcomposite-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libfreetype6-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev \
+            libcurl4-openssl-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE={% raw %}${{ env.BUILD_TYPE }}{% endraw %} \
+            -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD=OFF \
+            -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=OFF \
+{% if cookiecutter.include_faust == "yes" -%}
+            -D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=OFF \
+{% endif -%}
+            {% raw %}${{ matrix.cmake_args }}{% endraw %}
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE={% raw %}${{ env.BUILD_TYPE }}{% endraw %} `
+            -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD=OFF `
+            -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=OFF `
+{% if cookiecutter.include_faust == "yes" -%}
+            -D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=OFF `
+{% endif -%}
+            {% raw %}${{ matrix.cmake_args }}{% endraw %}
+
+      - name: Build
+        run: cmake --build build --config {% raw %}${{ env.BUILD_TYPE }}{% endraw %} --parallel
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: {% raw %}${{ matrix.artifact_name }}{% endraw %}
+          path: {% raw %}${{ matrix.artifact_paths }}{% endraw %}
+
+  # Create a GitHub Release with all artifacts when a tag is pushed
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Package artifacts
+        run: |
+          cd artifacts
+          for dir in */; do
+            name="${dir%/}"
+            zip -r "../${name}.zip" "$dir"
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: "*.zip"

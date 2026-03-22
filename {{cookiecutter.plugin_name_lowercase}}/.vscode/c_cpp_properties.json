@@ -4,6 +4,9 @@
       "name": "Debug",
       "includePath": [
         "${workspaceFolder}/**",
+{% if cookiecutter.include_faust == "yes" -%}
+        "${workspaceFolder}/src/dsp/generated",
+{% endif -%}
         "build/juce_binarydata_{{ cookiecutter.plugin_name }}Assets"
       ],
       "defines": [

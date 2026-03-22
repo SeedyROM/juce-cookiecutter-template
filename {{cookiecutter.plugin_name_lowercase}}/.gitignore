@@ -9,7 +9,9 @@ Builds/
 *.autosave
 *.swp
 *~
-
+{% if cookiecutter.include_faust == "yes" -%}
+*.dsp.json
+{% endif %}
 # CMake
 CMakeCache.txt
 CMakeFiles/

@@ -1,0 +1,58 @@
+# {{cookiecutter.plugin_name}} — {% if cookiecutter.include_faust == "yes" %}Faust/{% endif %}JUCE audio plugin
+# Run `just` or `just --list` to see available recipes.
+
+# Default build type
+build_type := "Debug"
+build_dir := "build"
+{% if cookiecutter.include_faust == "yes" -%}
+dsp_source := "dsp/{{cookiecutter.faust_dsp_name}}.dsp"
+gen_dir := "src/dsp/generated"
+{% endif %}
+# List available recipes
+default:
+    @just --list
+{% if cookiecutter.include_faust == "yes" %}
+# Run the Faust codegen (regenerates bridge files from .dsp)
+codegen:
+    python3 scripts/codegen.py {% raw %}{{dsp_source}}{% endraw %} --output {% raw %}{{gen_dir}}{% endraw %}
+
+# Configure the project with CMake + Ninja
+configure: codegen
+    cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja
+{% else %}
+# Configure the project with CMake + Ninja
+configure:
+    cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja
+{% endif %}
+# Build the plugin (all formats)
+build: configure
+    cmake --build {% raw %}{{build_dir}}{% endraw %} --config {% raw %}{{build_type}}{% endraw %}
+
+# Build in Release mode
+release:
+    just build_type=Release build
+
+# Clean the build directory
+clean:
+    rm -rf {% raw %}{{build_dir}}{% endraw %}
+
+# Clean and rebuild from scratch
+rebuild: clean build
+
+# Initialize/update git submodules (VST2 SDK, etc.)
+submodules:
+    git submodule update --init --recursive
+
+# Full fresh setup: submodules + clean build
+setup: submodules rebuild
+
+# Launch the standalone plugin
+run: build
+    open {% raw %}{{build_dir}}{% endraw %}/{{cookiecutter.plugin_name}}_artefacts/Standalone/{{cookiecutter.plugin_name}}.app
+
+# Build and reload in Element.app
+element: build
+    @bash scripts/element_dev.sh
+
+# Reconfigure and build (useful after CMakeLists.txt changes)
+reconfigure: clean configure build
