@@ -6,6 +6,7 @@ import shutil
 # Flags from cookiecutter.json
 include_faust = "{{ cookiecutter.include_faust }}" == "yes"
 include_ci = "{{ cookiecutter.include_ci }}" == "yes"
+include_advanced_ui = "{{ cookiecutter.include_advanced_ui }}" == "yes"
 
 # Paths relative to the generated project root
 FAUST_PATHS = [
@@ -17,6 +18,12 @@ FAUST_PATHS = [
 
 CI_PATHS = [
     ".github",
+]
+
+ADVANCED_UI_PATHS = [
+    "src/ui",
+    "src/components/controls/RotaryKnob.h",
+    "src/components/controls/RotaryKnob.cpp",
 ]
 
 
@@ -34,4 +41,8 @@ if not include_faust:
 
 if not include_ci:
     for p in CI_PATHS:
+        remove_path(p)
+
+if not include_advanced_ui:
+    for p in ADVANCED_UI_PATHS:
         remove_path(p)

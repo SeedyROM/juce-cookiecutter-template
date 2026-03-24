@@ -1,58 +1,58 @@
 # {{cookiecutter.plugin_name}} — {% if cookiecutter.include_faust == "yes" %}Faust/{% endif %}JUCE audio plugin
 # Run `just` or `just --list` to see available recipes.
 
-# Default build type
 build_type := "Debug"
 build_dir := "build"
 {% if cookiecutter.include_faust == "yes" -%}
 dsp_source := "dsp/{{cookiecutter.faust_dsp_name}}.dsp"
 gen_dir := "src/dsp/generated"
 {% endif %}
-# List available recipes
+plugin_formats := "{% if cookiecutter.include_vst2 == "yes" %}VST {% endif %}{% if cookiecutter.include_vst3 == "yes" %}VST3 {% endif %}{% if cookiecutter.include_au == "yes" %}AU {% endif %}{% if cookiecutter.include_standalone == "yes" %}Standalone{% endif %}"
+plugin_enable_vst2 := "OFF"
+plugin_copy_after_build := "ON"
+plugin_enable_codegen := "OFF"
+
 default:
     @just --list
-{% if cookiecutter.include_faust == "yes" %}
-# Run the Faust codegen (regenerates bridge files from .dsp)
+
+{% if cookiecutter.include_faust == "yes" -%}
 codegen:
     python3 scripts/codegen.py {% raw %}{{dsp_source}}{% endraw %} --output {% raw %}{{gen_dir}}{% endraw %}
-
-# Configure the project with CMake + Ninja
-configure: codegen
-    cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja
-{% else %}
-# Configure the project with CMake + Ninja
-configure:
-    cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja
 {% endif %}
-# Build the plugin (all formats)
-build: configure
+
+configure *flags:
+    @enable_vst2="{% raw %}{{plugin_enable_vst2}}{% endraw %}"; formats='{% raw %}{{plugin_formats}}{% endraw %}'; enable_codegen="{% raw %}{{plugin_enable_codegen}}{% endraw %}"; for flag in {% raw %}{{flags}}{% endraw %}; do if [ "$flag" = "--enable-vst2" ]; then enable_vst2=ON; formats="VST VST3 AU Standalone"; {% if cookiecutter.include_faust == "yes" %}elif [ "$flag" = "--enable-codegen" ]; then enable_codegen=ON; {% endif %}else echo "Unknown flag: $flag" >&2; exit 1; fi; done; cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja -DCMAKE_BUILD_TYPE={% raw %}{{build_type}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_FORMATS="$formats" -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD={% raw %}{{plugin_copy_after_build}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=ON {% if cookiecutter.include_vst2 == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_VST2=$enable_vst2 {% endif %}{% if cookiecutter.include_faust == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=$enable_codegen{% endif %}
+
+build *flags:
+    @just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} configure {% raw %}{{flags}}{% endraw %}; cmake --build {% raw %}{{build_dir}}{% endraw %} --config {% raw %}{{build_type}}{% endraw %}
+
+{% if cookiecutter.include_faust == "yes" -%}
+configure-codegen: codegen
+    just plugin_enable_codegen=ON configure
+
+build-codegen: configure-codegen
     cmake --build {% raw %}{{build_dir}}{% endraw %} --config {% raw %}{{build_type}}{% endraw %}
+{% endif %}
 
-# Build in Release mode
-release:
-    just build_type=Release build
+release *flags:
+    just build_type=Release build {% raw %}{{flags}}{% endraw %}
 
-# Clean the build directory
 clean:
     rm -rf {% raw %}{{build_dir}}{% endraw %}
 
-# Clean and rebuild from scratch
 rebuild: clean build
 
-# Initialize/update git submodules (VST2 SDK, etc.)
 submodules:
     git submodule update --init --recursive
 
-# Full fresh setup: submodules + clean build
 setup: submodules rebuild
 
-# Launch the standalone plugin
-run: build
-    open {% raw %}{{build_dir}}{% endraw %}/{{cookiecutter.plugin_name}}_artefacts/Standalone/{{cookiecutter.plugin_name}}.app
+run *flags:
+    just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} build {% raw %}{{flags}}{% endraw %}
+    open {% raw %}{{build_dir}}{% endraw %}/{{cookiecutter.plugin_name}}_artefacts/{% raw %}{{build_type}}{% endraw %}/Standalone/{{cookiecutter.plugin_name}}.app
 
-# Build and reload in Element.app
-element: build
+element *flags:
+    just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} build {% raw %}{{flags}}{% endraw %}
     @bash scripts/element_dev.sh
 
-# Reconfigure and build (useful after CMakeLists.txt changes)
 reconfigure: clean configure build

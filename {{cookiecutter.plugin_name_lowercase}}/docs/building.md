@@ -2,50 +2,38 @@
 
 ## Prerequisites
 
-- **CMake 3.22+**
-- **C++{{cookiecutter.cpp_standard}} compiler** (Clang, GCC, or MSVC)
-- **[just](https://github.com/casey/just)** command runner (recommended)
-- **[Ninja](https://ninja-build.org/)** build system (recommended)
+- CMake 3.22+
+- C++{{cookiecutter.cpp_standard}} compiler (Clang/GCC/MSVC)
+- Ninja (recommended)
+- just (recommended)
 {% if cookiecutter.include_faust == "yes" -%}
-- **[Faust](https://faust.grame.fr/downloads/)** (only needed when modifying the DSP)
+- Faust (only needed when changing DSP)
 {% endif %}
-### Platform-Specific
-
-- **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-- **Windows**: Visual Studio 2019+ with C++ desktop workload
-- **Linux**: Build essentials + JUCE dependencies:
-  ```bash
-  sudo apt-get install -y \
-    libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev \
-    libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
-    libfreetype6-dev libglu1-mesa-dev mesa-common-dev \
-    libcurl4-openssl-dev libwebkit2gtk-4.1-dev
-  ```
 
 ## Quick Start
 
 ```bash
-just build          # Configure + build (Debug)
-just release        # Configure + build (Release)
-just run            # Build + launch standalone
-just clean          # Remove build directory
-just rebuild        # Clean + full rebuild
+just build
+just release
+just run
 ```
 
 ## CMake Options
 
 | Option | Default | Description |
-|--------|---------|-------------|
-| `{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD` | `ON` | Copy plugin to system dirs after build |
-| `{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE` | `ON` | Use `-march=native` (disable for distributable builds) |
+|---|---|---|
+| `{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD` | `ON` | Copy plugin to system directories |
+| `{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE` | `ON` | Machine-specific optimization for local builds |
+| `{{cookiecutter.plugin_name | upper}}_ENABLE_IPO` | `ON` | Enable LTO/IPO in Release when available |
 {% if cookiecutter.include_faust == "yes" -%}
-| `{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN` | `ON` | Run Faust codegen (requires `faust` on PATH) |
+| `{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN` | `ON` | Run Faust codegen if `faust` is on PATH |
 {% endif -%}
-| `{{cookiecutter.plugin_name | upper}}_FORMATS` | `"{% if cookiecutter.include_vst2 == "yes" %}VST {% endif %}{% if cookiecutter.include_vst3 == "yes" %}VST3 {% endif %}{% if cookiecutter.include_au == "yes" %}AU {% endif %}{% if cookiecutter.include_standalone == "yes" %}Standalone{% endif %}"` | Plugin formats to build |
+{% if cookiecutter.include_vst2 == "yes" -%}
+| `{{cookiecutter.plugin_name | upper}}_ENABLE_VST2` | `OFF` | Enable VST2 if SDK checkout exists |
+{% endif -%}
+| `{{cookiecutter.plugin_name | upper}}_FORMATS` | format list | Space-separated plugin formats |
 
 ## CI / Distributable Builds
-
-For CI or distribution, disable machine-specific optimizations:
 
 ```bash
 cmake -B build -G Ninja \
@@ -57,19 +45,25 @@ cmake -B build -G Ninja \
 cmake --build build --config Release --parallel
 ```
 
-This uses SSE4.2 as the baseline for x86_64 (broad compatibility) instead of `-march=native`.
+## Optimization Notes
 
-## DSP Optimization Flags
+- Clang/GCC: `-O3 -ffast-math -ffp-contract=fast -fno-math-errno -funroll-loops`
+- x86_64 local: `-march=native`
+- x86_64 CI/distribution: `-msse4.2`
+- Clang denormal handling: `-fdenormal-fp-math=positive-zero`
+- MSVC: `/O2 /fp:fast` (+ `/arch:AVX2` when enabled)
 
-The CMake build applies these optimizations automatically for Release builds:
+## CI Pipeline
 
-| Compiler | Flags | Purpose |
-|----------|-------|---------|
-| Clang/GCC | `-O3 -ffast-math -funroll-loops` | Auto-vectorization of DSP loops |
-| Clang/GCC (x86 dev) | `-march=native` | Target exact CPU (AVX2/FMA) |
-| Clang/GCC (x86 CI) | `-msse4.2` | Broad compatibility baseline |
-| Clang | `-fdenormal-fp-math=positive-zero` | Flush denormals to zero |
-| MSVC | `/O2 /fp:fast` | Fast float + full optimization |
-| MSVC (dev) | `/arch:AVX2` | AVX2 instructions |
+The generated GitHub workflow builds:
 
-ARM64 (Apple Silicon) has NEON enabled by default — no extra flags needed.
+- macOS universal
+- macOS legacy x86_64
+- Windows
+- Linux (+ pluginval VST3 validation)
+
+It also supports:
+
+- `workflow_dispatch` release runs
+- draft release packaging for `v*` tags
+- tag verification/creation for manual release dispatch

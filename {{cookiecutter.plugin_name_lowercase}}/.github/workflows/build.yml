@@ -18,10 +18,24 @@ on:
       - "LICENSE"
       - ".gitignore"
       - ".vscode/**"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.2.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Build artifacts only, skip creating/updating release"
+        required: false
+        default: true
+        type: boolean
 
 env:
   BUILD_TYPE: Release
-  PLUGIN_NAME: {{cookiecutter.plugin_name}}
+
+concurrency:
+  group: {% raw %}build-${{ github.ref }}{% endraw %}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -68,6 +82,8 @@ jobs:
             cmake_args: >-
               -D{{cookiecutter.plugin_name | upper}}_FORMATS="VST3 Standalone"
             artifact_name: {{cookiecutter.plugin_name}}-Linux
+            pluginval_asset: pluginval_Linux.zip
+            pluginval_binary: pluginval
             artifact_paths: |
               build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
               build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
@@ -76,12 +92,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Linux needs ALSA, X11, GL, and other deps for JUCE
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            gh \
             libasound2-dev \
             libx11-dev \
             libxcomposite-dev \
@@ -123,21 +139,89 @@ jobs:
       - name: Build
         run: cmake --build build --config {% raw %}${{ env.BUILD_TYPE }}{% endraw %} --parallel
 
+      - name: Download pluginval
+        if: matrix.pluginval_asset != ''
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: gh release download v1.0.4 --repo Tracktion/pluginval --pattern "{% raw %}${{ matrix.pluginval_asset }}{% endraw %}" --dir pluginval
+
+      - name: Unpack pluginval
+        if: matrix.pluginval_asset != ''
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import zipfile
+
+          archive = next(pathlib.Path("pluginval").glob("*.zip"))
+          with zipfile.ZipFile(archive) as zf:
+              zf.extractall("pluginval")
+          PY
+
+      - name: Validate VST3 with pluginval
+        if: matrix.pluginval_asset != ''
+        env:
+          DISPLAY: ':99'
+        run: |
+          chmod +x pluginval/{% raw %}${{ matrix.pluginval_binary }}{% endraw %}
+          xvfb-run -a pluginval/{% raw %}${{ matrix.pluginval_binary }}{% endraw %} --strictness-level 5 --validate-in-process --skip-gui-tests build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3/{{cookiecutter.plugin_name}}.vst3
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: {% raw %}${{ matrix.artifact_name }}{% endraw %}
           path: {% raw %}${{ matrix.artifact_paths }}{% endraw %}
 
-  # Create a GitHub Release with all artifacts when a tag is pushed
   release:
     name: Create Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.dry_run != true)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Determine release tag
+        id: version
+        run: |
+          if [[ "{% raw %}${{ github.event_name }}{% endraw %}" == "workflow_dispatch" ]]; then
+            echo "tag={% raw %}${{ inputs.tag }}{% endraw %}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag={% raw %}${{ github.ref_name }}{% endraw %}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ensure release tag exists
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = '{% raw %}${{ steps.version.outputs.tag }}{% endraw %}'
+            const format = /^v\d+\.\d+\.\d+([-.].+)?$/
+
+            if (!format.test(tag)) {
+              core.setFailed(`Tag '${tag}' is not in expected format (e.g. v0.2.0 or v0.2.0-rc1).`)
+              return
+            }
+
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const ref = `tags/${tag}`
+
+            try {
+              await github.rest.git.getRef({ owner, repo, ref })
+              core.info(`Tag '${tag}' already exists.`)
+            } catch (error) {
+              if (error.status !== 404) throw error
+
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/tags/${tag}`,
+                sha: context.sha
+              })
+              core.info(`Created tag '${tag}' at ${context.sha}.`)
+            }
+
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
@@ -154,6 +238,12 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: {% raw %}${{ steps.version.outputs.tag }}{% endraw %}
+          name: {{cookiecutter.plugin_name}} {% raw %}${{ steps.version.outputs.tag }}{% endraw %}
           draft: true
+          prerelease: {% raw %}${{ contains(steps.version.outputs.tag, '-') }}{% endraw %}
           generate_release_notes: true
+          target_commitish: {% raw %}${{ github.sha }}{% endraw %}
+          fail_on_unmatched_files: true
+          overwrite_files: true
           files: "*.zip"
