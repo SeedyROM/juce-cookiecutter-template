@@ -69,12 +69,12 @@ def extract_params(ui_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return params
 
 
-def get_sort_key(param: dict[str, Any]) -> str:
+def get_sort_key(param: dict[str, Any]) -> int:
     for meta_entry in param.get("meta", []):
         for key in meta_entry:
             if key.isdigit():
-                return key
-    return "99"
+                return int(key)
+    return 99
 
 
 def run_faust_cpp(

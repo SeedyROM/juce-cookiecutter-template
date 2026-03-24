@@ -5,6 +5,6 @@
 
 import("stdfaust.lib");
 
-gain = hslider("[01] Gain", 1.0, 0.0, 1.0, 0.01) : si.smoo;
+gain = hslider("[1][id:gain] Gain", 1.0, 0.0, 1.0, 0.01) : si.smoo;
 
 process = _, _ : *(gain), *(gain);
