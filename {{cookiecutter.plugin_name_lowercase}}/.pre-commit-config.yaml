@@ -1,0 +1,12 @@
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        entry: clang-format
+        args:
+          - --style=file
+          - -i
+        language: system
+        files: ^src/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$
+        exclude: ^src/dsp/generated/
