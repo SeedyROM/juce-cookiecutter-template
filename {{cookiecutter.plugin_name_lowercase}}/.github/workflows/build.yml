@@ -119,9 +119,9 @@ jobs:
             -DCMAKE_BUILD_TYPE={% raw %}${{ env.BUILD_TYPE }}{% endraw %} \
             -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD=OFF \
             -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=OFF \
-{% if cookiecutter.include_faust == "yes" -%}
+            {%- if cookiecutter.include_faust == "yes" %}
             -D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=OFF \
-{% endif -%}
+            {%- endif %}
             {% raw %}${{ matrix.cmake_args }}{% endraw %}
 
       - name: Configure (Windows)
@@ -131,9 +131,9 @@ jobs:
             -DCMAKE_BUILD_TYPE={% raw %}${{ env.BUILD_TYPE }}{% endraw %} `
             -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD=OFF `
             -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=OFF `
-{% if cookiecutter.include_faust == "yes" -%}
+            {%- if cookiecutter.include_faust == "yes" %}
             -D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=OFF `
-{% endif -%}
+            {%- endif %}
             {% raw %}${{ matrix.cmake_args }}{% endraw %}
 
       - name: Build

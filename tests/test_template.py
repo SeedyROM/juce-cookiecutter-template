@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 from cookiecutter.main import cookiecutter  # type: ignore
 
 
@@ -259,3 +260,39 @@ def test_script_permissions(template_dir, temp_output_dir, default_context):
     script_path = project_dir / "scripts" / "element_dev.sh"
     assert script_path.exists()
     assert script_path.read_text().startswith("#!/bin/bash")
+
+
+@pytest.mark.parametrize("include_faust", ["yes", "no"])
+def test_ci_yaml_is_valid(template_dir, temp_output_dir, default_context, include_faust):
+    """Ensure the generated build.yml is valid YAML with correct indentation."""
+    project_dir = generate(
+        template_dir,
+        temp_output_dir,
+        {
+            **default_context,
+            "plugin_name": f"CITest{include_faust.title()}",
+            "include_faust": include_faust,
+            "include_ci": "yes",
+        },
+    )
+    ci_path = project_dir / ".github" / "workflows" / "build.yml"
+    assert ci_path.exists()
+
+    # Must parse as valid YAML
+    content = ci_path.read_text()
+    workflow = yaml.safe_load(content)
+    assert workflow is not None
+    assert "jobs" in workflow
+
+    # Every line inside the run: blocks must be properly indented
+    # (no lines starting at column 0 inside a step's run block)
+    for line_no, line in enumerate(content.splitlines(), start=1):
+        stripped = line.lstrip()
+        if stripped and not stripped.startswith("#") and not stripped.startswith("---"):
+            # Top-level keys (name, on, env, concurrency, jobs) are allowed at col 0
+            if line == stripped and not any(
+                stripped.startswith(k) for k in ("name:", "on:", "env:", "concurrency:", "jobs:")
+            ):
+                pytest.fail(
+                    f"Line {line_no} has unexpected content at column 0: {line!r}"
+                )
