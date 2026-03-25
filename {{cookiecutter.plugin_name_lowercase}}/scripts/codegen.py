@@ -69,6 +69,17 @@ def extract_params(ui_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return params
 
 
+def extract_bargraphs(ui_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    bargraphs = []
+    for item in ui_items:
+        item_type = item.get("type", "")
+        if item_type in ("vgroup", "hgroup", "tgroup"):
+            bargraphs.extend(extract_bargraphs(item.get("items", [])))
+        elif item_type in ("hbargraph", "vbargraph"):
+            bargraphs.append(item)
+    return bargraphs
+
+
 def get_sort_key(param: dict[str, Any]) -> int:
     for meta_entry in param.get("meta", []):
         for key in meta_entry:
@@ -123,6 +134,12 @@ def run_faust_cpp(
 
     content = re.sub(
         r"(void instanceInit\w+SIG\d+\(int sample_rate\) \{)",
+        r"\1\n\t\t(void)sample_rate;",
+        content,
+    )
+
+    content = re.sub(
+        r"(static void classInit\(int sample_rate\) \{)",
         r"\1\n\t\t(void)sample_rate;",
         content,
     )
@@ -224,11 +241,16 @@ def generate_params_h(params: list[dict[str, Any]], dsp_name: str) -> str:
         ptype = p["type"]
 
         if ptype == "checkbox" or ptype == "button":
+            # Check for [default:1] metadata to set initial state
+            default_val = "false"
+            for meta_entry in p.get("meta", []):
+                if "default" in meta_entry and str(meta_entry["default"]) == "1":
+                    default_val = "true"
             layout_lines.append(
                 f"    params.push_back(std::make_unique<juce::AudioParameterBool>(\n"
                 f"        juce::ParameterID{{FaustParamIDs::{camel}, 1}},\n"
                 f'        "{p["label"]}",\n'
-                f"        false));"
+                f"        {default_val}));"
             )
         else:
             init_val = float(p.get("init", 0))
@@ -351,6 +373,7 @@ private:
 
 def generate_bridge_h(
     params: list[dict[str, Any]],
+    bargraphs: list[dict[str, Any]],
     dsp_name: str,
     class_name: str = "{% endraw %}{{ cookiecutter.faust_class_name }}{% raw %}",
     num_inputs: int = 2,
@@ -395,6 +418,14 @@ def generate_bridge_h(
             getter_lines.append(
                 f"    float get{pascal}() const {{ return loadParam({camel}Param_); }}"
             )
+
+    for b in bargraphs:
+        bid = get_param_id(b)
+        pascal = param_id_to_pascal(bid)
+        varname = b["varname"]
+        getter_lines.append(
+            f"    float get{pascal}() const {{ return dsp_.{varname}; }}"
+        )
 
     return BRIDGE_HEADER.format(
         dsp_name=dsp_name,
@@ -453,12 +484,14 @@ def main():
     ui_tree = faust_json.get("ui", [])
     params = extract_params(ui_tree)
     params.sort(key=get_sort_key)
+    bargraphs = extract_bargraphs(ui_tree)
+    bargraphs.sort(key=get_sort_key)
 
     num_inputs = faust_json.get("inputs", 2)
     num_outputs = faust_json.get("outputs", 2)
 
     print(
-        f"[codegen] Found {len(params)} parameters, {num_inputs} inputs, {num_outputs} outputs"
+        f"[codegen] Found {len(params)} parameters, {len(bargraphs)} bargraphs, {num_inputs} inputs, {num_outputs} outputs"
     )
 
     defs_h = generate_faust_defs_h()
@@ -471,7 +504,7 @@ def main():
     with open(params_path, "w") as f:
         f.write(params_h)
 
-    bridge_h = generate_bridge_h(params, dsp_name, class_name, num_inputs, num_outputs)
+    bridge_h = generate_bridge_h(params, bargraphs, dsp_name, class_name, num_inputs, num_outputs)
     bridge_path = os.path.join(output_dir, "FaustBridge.h")
     with open(bridge_path, "w") as f:
         f.write(bridge_h)
