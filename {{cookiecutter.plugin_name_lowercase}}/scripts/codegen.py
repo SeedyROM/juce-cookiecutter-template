@@ -150,7 +150,28 @@ def run_faust_cpp(
 
 
 def run_faust_json(dsp_path: str, output_dir: str) -> str:
-    cmd = ["faust", "-json", "-o", "/dev/null", dsp_path]
+    # IMPORTANT: the flags here must match run_faust_cpp() exactly so that
+    # the varname fields (fVslider0, fVslider1, ...) in the JSON correspond
+    # to the same variables in the generated C++ DSP.  Different compilation
+    # options (especially -vec, -mcd) cause Faust to assign variable names
+    # in a different order.
+    cmd = [
+        "faust",
+        "-json",
+        "-vec",
+        "-vs",
+        "32",
+        "-lv",
+        "1",
+        "-ftz",
+        "0",
+        "-mcd",
+        "0",
+        "-single",
+        "-o",
+        "/dev/null",
+        dsp_path,
+    ]
     print(f"  Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -437,13 +458,37 @@ def generate_bridge_h(
                 f"    float get{pascal}() const {{ return loadParam({camel}Param_); }}"
             )
 
+    # Deduplicate bargraphs with the same id (e.g. stereo GR meters).
+    # When duplicates exist, generate per-channel getters (L/R) plus a
+    # combined getter that returns the min (most-compressed) value.
+    seen_bargraph_ids: dict[str, list[dict[str, Any]]] = {}
     for b in bargraphs:
         bid = get_param_id(b)
+        seen_bargraph_ids.setdefault(bid, []).append(b)
+
+    for bid, bg_list in seen_bargraph_ids.items():
         pascal = param_id_to_pascal(bid)
-        varname = b["varname"]
-        getter_lines.append(
-            f"    float get{pascal}() const {{ return dsp_.{varname}; }}"
-        )
+        if len(bg_list) == 1:
+            varname = bg_list[0]["varname"]
+            getter_lines.append(
+                f"    float get{pascal}() const {{ return dsp_.{varname}; }}"
+            )
+        else:
+            # Per-channel getters (L, R, ...)
+            suffixes = ["L", "R", "C", "Ls", "Rs", "Lfe"]  # extend if > stereo
+            varnames = []
+            for i, b in enumerate(bg_list):
+                suffix = suffixes[i] if i < len(suffixes) else str(i)
+                varname = b["varname"]
+                varnames.append(varname)
+                getter_lines.append(
+                    f"    float get{pascal}{suffix}() const {{ return dsp_.{varname}; }}"
+                )
+            # Combined getter: min of all channels (most gain reduction)
+            min_expr = ", ".join(f"dsp_.{v}" for v in varnames)
+            getter_lines.append(
+                f"    float get{pascal}() const {{ return juce::jmin({min_expr}); }}"
+            )
 
     return BRIDGE_HEADER.format(
         dsp_name=dsp_name,
