@@ -11,6 +11,7 @@ Also invokes the Faust compiler to generate FaustDSP.h.
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -257,11 +258,28 @@ def generate_params_h(params: list[dict[str, Any]], dsp_name: str) -> str:
             min_val = float(p.get("min", 0))
             max_val = float(p.get("max", 1))
             step_val = float(p.get("step", 0.01))
+            scale = get_meta_value(p, "scale")
+            if scale == "log" and max_val > min_val:
+                # Compute skew factor that centres the knob on the geometric mean.
+                # JUCE formula: skew = log(0.5) / log((centre - min) / (max - min))
+                centre = math.sqrt(min_val * max_val)
+                skew = math.log(0.5) / math.log(
+                    (centre - min_val) / (max_val - min_val)
+                )
+                range_str = (
+                    f"juce::NormalisableRange<float>"
+                    f"({min_val}f, {max_val}f, {step_val}f, {skew:.4f}f)"
+                )
+            else:
+                range_str = (
+                    f"juce::NormalisableRange<float>"
+                    f"({min_val}f, {max_val}f, {step_val}f)"
+                )
             layout_lines.append(
                 f"    params.push_back(std::make_unique<juce::AudioParameterFloat>(\n"
                 f"        juce::ParameterID{{FaustParamIDs::{camel}, 1}},\n"
                 f'        "{p["label"]}",\n'
-                f"        juce::NormalisableRange<float>({min_val}f, {max_val}f, {step_val}f),\n"
+                f"        {range_str},\n"
                 f"        {init_val}f));"
             )
 
