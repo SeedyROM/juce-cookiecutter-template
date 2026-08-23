@@ -6,7 +6,7 @@
 
 - **Author**: {{cookiecutter.author_name}} ({{cookiecutter.author_email}})
 - **Company**: {{cookiecutter.company_name}}
-- **Formats**: {% if cookiecutter.include_vst2 == "yes" %}VST2, {% endif %}{% if cookiecutter.include_vst3 == "yes" %}VST3, {% endif %}{% if cookiecutter.include_au == "yes" %}AU, {% endif %}{% if cookiecutter.include_standalone == "yes" %}Standalone{% endif %}
+- **Formats**: {% if cookiecutter.include_vst2 == "yes" %}VST2, {% endif %}{% if cookiecutter.include_vst3 == "yes" %}VST3, {% endif %}{% if cookiecutter.include_au == "yes" %}AU, {% endif %}{% if cookiecutter.include_clap == "yes" %}CLAP, {% endif %}{% if cookiecutter.include_standalone == "yes" %}Standalone{% endif %}
 
 ## Architecture Included
 
@@ -45,6 +45,27 @@ cmake -B build -G Ninja
 cmake --build build --config Release
 ```
 
+{% if cookiecutter.include_clap == "yes" -%}
+## CLAP
+
+Built through [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions),
+which CMake fetches at configure time -- no submodule, but it does need network access
+on the first configure. CLAP is not a JUCE format, so it sits outside
+`{{cookiecutter.plugin_name | upper}}_FORMATS` and has its own switch:
+
+```bash
+just plugin_enable_clap=OFF build      # or -D{{cookiecutter.plugin_name | upper}}_ENABLE_CLAP=OFF
+```
+
+Parameters are exported with their real JUCE ranges rather than normalised 0-1, so a
+host shows `-4.3 dB` instead of `0.41`. That choice is baked into how automation is
+stored, so change it only before there are sessions to break.
+
+Known gap: clap-juce-extensions does not map JUCE's `getBypassParameter()` onto
+`CLAP_PARAM_IS_BYPASS`, so a CLAP host's own bypass button is not bound to the plugin's
+bypass parameter. The parameter is still present and automatable. VST3 and AU are
+unaffected.
+{% endif %}
 ## CI/Distribution Build
 
 ```bash

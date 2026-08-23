@@ -19,6 +19,19 @@ option({{ UPPER }}_ENABLE_CODEGEN "Run Faust codegen (requires faust on PATH)" O
 {% if cookiecutter.include_vst2 == "yes" -%}
 option({{ UPPER }}_ENABLE_VST2 "Enable legacy VST2 builds when SDK is available" OFF)
 {% endif -%}
+{% if cookiecutter.include_clap == "yes" -%}
+# CLAP is not a JUCE format, so it lives outside {{ UPPER }}_FORMATS and gets its own
+# switch. Off skips the fetch entirely, for builds without network access.
+option({{ UPPER }}_ENABLE_CLAP "Build a CLAP via clap-juce-extensions" ON)
+
+# A commit, not a tag. That repository's tags ("0.26.0" and friends) are CLAP *spec*
+# versions from 2022 rather than releases of the extension, and building against one
+# silently gets a pre-CLAP-1.0 wrapper whose CMake signature is different enough that
+# arguments land in the wrong parameters and emerge as mangled preprocessor defines.
+# Upstream ships from main, so a pinned commit is how a reproducible build works here.
+set({{ UPPER }}_CLAP_VERSION "c1a5ad025f95d01e03267857fa8276ebeed16500"
+    CACHE STRING "clap-juce-extensions commit to build against")
+{% endif -%}
 set({{ UPPER }}_FORMATS "{% if cookiecutter.include_vst2 == "yes" %}VST {% endif %}{% if cookiecutter.include_vst3 == "yes" %}VST3 {% endif %}{% if cookiecutter.include_au == "yes" %}AU {% endif %}{% if cookiecutter.include_standalone == "yes" %}Standalone{% endif %}" CACHE STRING "Space-separated list of plugin formats to build")
 
 {% if cookiecutter.include_vst2 == "yes" -%}
@@ -81,6 +94,20 @@ else()
 endif()
 {% endif -%}
 
+{% if cookiecutter.include_clap == "yes" -%}
+# After JUCE on purpose: the extension's CMake reads CMAKE_CXX_STANDARD and expects the
+# JUCE targets to exist already. It pulls the CLAP headers and helpers in as git
+# submodules, which FetchContent handles on its own.
+if({{ UPPER }}_ENABLE_CLAP)
+    FetchContent_Declare(
+        clap-juce-extensions
+        GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+        GIT_TAG ${{"{"}}{{ UPPER }}_CLAP_VERSION}
+    )
+    FetchContent_MakeAvailable(clap-juce-extensions)
+endif()
+
+{% endif -%}
 separate_arguments({{ UPPER }}_FORMATS_LIST UNIX_COMMAND "${{"{"}}{{ UPPER }}_FORMATS}")
 
 {% if cookiecutter.include_vst2 == "yes" -%}
@@ -203,3 +230,24 @@ PUBLIC
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+{% if cookiecutter.include_clap == "yes" -%}
+if({{ UPPER }}_ENABLE_CLAP)
+    # Creates the {{cookiecutter.plugin_name}}_CLAP target alongside the JUCE format
+    # targets, and picks up COPY_PLUGIN_AFTER_BUILD from the JUCE target on its own.
+    #
+    # CLAP_USE_JUCE_PARAMETER_RANGES ALL: without it a host sees every parameter as 0-1
+    # and shows "0.41" where the plugin means "-4.3 dB". This is baked into how
+    # automation gets stored, so it is a decision worth making before anyone has a
+    # session to break.
+    #
+    # Known gap: clap-juce-extensions does not map JUCE's getBypassParameter() onto
+    # CLAP_PARAM_IS_BYPASS, so a CLAP host's own bypass button is not bound to the
+    # plugin's bypass parameter. VST3 and AU are unaffected.
+    clap_juce_extensions_plugin(TARGET {{cookiecutter.plugin_name}}
+        CLAP_ID "com.{{cookiecutter.company_name_lowercase}}.{{cookiecutter.plugin_name_lowercase}}"
+        CLAP_FEATURES audio-effect utility
+        CLAP_USE_JUCE_PARAMETER_RANGES ALL
+    )
+endif()
+{% endif -%}

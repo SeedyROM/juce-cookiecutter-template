@@ -1,5 +1,6 @@
 """Tests for the JUCE cookiecutter template."""
 
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -34,6 +35,7 @@ def default_context():
         "include_vst3": "yes",
         "include_au": "yes",
         "include_standalone": "yes",
+        "include_clap": "yes",
         "include_faust": "no",
         "include_advanced_ui": "no",
         "include_ci": "yes",
@@ -108,6 +110,43 @@ def test_vst2_conditional(template_dir, temp_output_dir, default_context):
     )
     cmake_without = (without_vst2 / "CMakeLists.txt").read_text()
     assert "juce_set_vst2_sdk_path" not in cmake_without
+
+
+def test_clap_conditional_enabled(template_dir, temp_output_dir, default_context):
+    project_dir = generate(
+        template_dir,
+        temp_output_dir,
+        {**default_context, "plugin_name": "WithCLAP", "include_clap": "yes"},
+    )
+    cmake = (project_dir / "CMakeLists.txt").read_text()
+
+    assert "WITHCLAP_ENABLE_CLAP" in cmake
+    assert "clap_juce_extensions_plugin(TARGET WithCLAP" in cmake
+    assert 'CLAP_ID "com.testcompany.withclap"' in cmake
+    assert "CLAP_USE_JUCE_PARAMETER_RANGES ALL" in cmake
+
+    # Pinned to a commit, never a tag: that repository's tags are CLAP spec versions
+    # from 2022, and building against one silently yields a pre-CLAP-1.0 wrapper.
+    assert re.search(r"WITHCLAP_CLAP_VERSION \"[0-9a-f]{40}\"", cmake)
+
+    assert "plugin_enable_clap" in (project_dir / "justfile").read_text()
+    assert "CLAP" in (project_dir / "README.md").read_text()
+
+
+def test_clap_conditional_disabled(template_dir, temp_output_dir, default_context):
+    project_dir = generate(
+        template_dir,
+        temp_output_dir,
+        # Deliberately a name with no "clap" in it, so the negative assertions below
+        # cannot be satisfied or defeated by the plugin name itself.
+        {**default_context, "plugin_name": "PlainFx", "include_clap": "no"},
+    )
+    cmake = (project_dir / "CMakeLists.txt").read_text()
+
+    assert "clap_juce_extensions_plugin" not in cmake
+    assert "ENABLE_CLAP" not in cmake
+    assert "clap-juce-extensions" not in cmake
+    assert "plugin_enable_clap" not in (project_dir / "justfile").read_text()
 
 
 def test_faust_conditional_enabled(template_dir, temp_output_dir, default_context):

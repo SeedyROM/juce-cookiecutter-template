@@ -55,6 +55,9 @@ jobs:
               build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
               build/{{cookiecutter.plugin_name}}_artefacts/Release/AU
               build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+              {%- if cookiecutter.include_clap == "yes" %}
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/CLAP
+              {%- endif %}
 
           - name: macOS-Legacy
             os: macos-14
@@ -67,6 +70,9 @@ jobs:
               build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
               build/{{cookiecutter.plugin_name}}_artefacts/Release/AU
               build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+              {%- if cookiecutter.include_clap == "yes" %}
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/CLAP
+              {%- endif %}
 
           - name: Windows
             os: windows-latest
@@ -76,6 +82,9 @@ jobs:
             artifact_paths: |
               build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
               build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+              {%- if cookiecutter.include_clap == "yes" %}
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/CLAP
+              {%- endif %}
 
           - name: Linux
             os: ubuntu-latest
@@ -87,6 +96,9 @@ jobs:
             artifact_paths: |
               build/{{cookiecutter.plugin_name}}_artefacts/Release/VST3
               build/{{cookiecutter.plugin_name}}_artefacts/Release/Standalone
+              {%- if cookiecutter.include_clap == "yes" %}
+              build/{{cookiecutter.plugin_name}}_artefacts/Release/CLAP
+              {%- endif %}
 
     steps:
       - name: Checkout

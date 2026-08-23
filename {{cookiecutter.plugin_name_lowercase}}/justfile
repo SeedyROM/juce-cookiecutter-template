@@ -11,6 +11,9 @@ plugin_formats := "{% if cookiecutter.include_vst2 == "yes" %}VST {% endif %}{% 
 plugin_enable_vst2 := "OFF"
 plugin_copy_after_build := "ON"
 plugin_enable_codegen := "OFF"
+{% if cookiecutter.include_clap == "yes" -%}
+plugin_enable_clap := "ON"
+{% endif -%}
 
 default:
     @just --list
@@ -21,10 +24,10 @@ codegen:
 {% endif %}
 
 configure *flags:
-    @enable_vst2="{% raw %}{{plugin_enable_vst2}}{% endraw %}"; formats='{% raw %}{{plugin_formats}}{% endraw %}'; enable_codegen="{% raw %}{{plugin_enable_codegen}}{% endraw %}"; for flag in {% raw %}{{flags}}{% endraw %}; do if [ "$flag" = "--enable-vst2" ]; then enable_vst2=ON; formats="VST VST3 AU Standalone"; {% if cookiecutter.include_faust == "yes" %}elif [ "$flag" = "--enable-codegen" ]; then enable_codegen=ON; {% endif %}else echo "Unknown flag: $flag" >&2; exit 1; fi; done; cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja -DCMAKE_BUILD_TYPE={% raw %}{{build_type}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_FORMATS="$formats" -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD={% raw %}{{plugin_copy_after_build}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=ON {% if cookiecutter.include_vst2 == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_VST2=$enable_vst2 {% endif %}{% if cookiecutter.include_faust == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=$enable_codegen{% endif %}
+    @enable_vst2="{% raw %}{{plugin_enable_vst2}}{% endraw %}"; formats='{% raw %}{{plugin_formats}}{% endraw %}'; enable_codegen="{% raw %}{{plugin_enable_codegen}}{% endraw %}"; for flag in {% raw %}{{flags}}{% endraw %}; do if [ "$flag" = "--enable-vst2" ]; then enable_vst2=ON; formats="VST VST3 AU Standalone"; {% if cookiecutter.include_faust == "yes" %}elif [ "$flag" = "--enable-codegen" ]; then enable_codegen=ON; {% endif %}else echo "Unknown flag: $flag" >&2; exit 1; fi; done; cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja -DCMAKE_BUILD_TYPE={% raw %}{{build_type}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_FORMATS="$formats" -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD={% raw %}{{plugin_copy_after_build}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=ON {% if cookiecutter.include_clap == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_CLAP={% raw %}{{plugin_enable_clap}}{% endraw %} {% endif %}{% if cookiecutter.include_vst2 == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_VST2=$enable_vst2 {% endif %}{% if cookiecutter.include_faust == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=$enable_codegen{% endif %}
 
 build *flags:
-    @just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} configure {% raw %}{{flags}}{% endraw %}; cmake --build {% raw %}{{build_dir}}{% endraw %} --config {% raw %}{{build_type}}{% endraw %}
+    @just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} {% if cookiecutter.include_clap == "yes" %}plugin_enable_clap={% raw %}{{plugin_enable_clap}}{% endraw %}{% endif %} configure {% raw %}{{flags}}{% endraw %}; cmake --build {% raw %}{{build_dir}}{% endraw %} --config {% raw %}{{build_type}}{% endraw %}
 
 {% if cookiecutter.include_faust == "yes" -%}
 configure-codegen: codegen
@@ -48,11 +51,11 @@ submodules:
 setup: submodules rebuild
 
 run *flags:
-    just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} build {% raw %}{{flags}}{% endraw %}
+    just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} {% if cookiecutter.include_clap == "yes" %}plugin_enable_clap={% raw %}{{plugin_enable_clap}}{% endraw %}{% endif %} build {% raw %}{{flags}}{% endraw %}
     open {% raw %}{{build_dir}}{% endraw %}/{{cookiecutter.plugin_name}}_artefacts/{% raw %}{{build_type}}{% endraw %}/Standalone/{{cookiecutter.plugin_name}}.app
 
 element *flags:
-    just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} build {% raw %}{{flags}}{% endraw %}
+    just build_type={% raw %}{{build_type}}{% endraw %} plugin_formats="{% raw %}{{plugin_formats}}{% endraw %}" plugin_enable_vst2={% raw %}{{plugin_enable_vst2}}{% endraw %} plugin_copy_after_build={% raw %}{{plugin_copy_after_build}}{% endraw %} plugin_enable_codegen={% raw %}{{plugin_enable_codegen}}{% endraw %} {% if cookiecutter.include_clap == "yes" %}plugin_enable_clap={% raw %}{{plugin_enable_clap}}{% endraw %}{% endif %} build {% raw %}{{flags}}{% endraw %}
     @bash scripts/element_dev.sh
 
 reconfigure: clean configure build

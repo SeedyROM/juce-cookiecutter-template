@@ -31,7 +31,16 @@ just run
 {% if cookiecutter.include_vst2 == "yes" -%}
 | `{{cookiecutter.plugin_name | upper}}_ENABLE_VST2` | `OFF` | Enable VST2 if SDK checkout exists |
 {% endif -%}
-| `{{cookiecutter.plugin_name | upper}}_FORMATS` | format list | Space-separated plugin formats |
+| `{{cookiecutter.plugin_name | upper}}_FORMATS` | format list | Space-separated JUCE plugin formats |
+{% if cookiecutter.include_clap == "yes" -%}
+| `{{cookiecutter.plugin_name | upper}}_ENABLE_CLAP` | `ON` | Build a CLAP; fetches clap-juce-extensions at configure time |
+| `{{cookiecutter.plugin_name | upper}}_CLAP_VERSION` | pinned commit | clap-juce-extensions commit to build against |
+
+CLAP is not a JUCE format, so it sits outside `{{cookiecutter.plugin_name | upper}}_FORMATS` and gets its own
+switch. The pin is a commit rather than a tag on purpose: that repository's tags are
+CLAP *spec* versions from 2022, not releases, and building against one silently
+produces a pre-CLAP-1.0 wrapper.
+{% endif -%}
 
 ## CI / Distributable Builds
 
