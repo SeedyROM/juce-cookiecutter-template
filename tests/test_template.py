@@ -169,6 +169,72 @@ def test_faust_conditional_enabled(template_dir, temp_output_dir, default_contex
     assert "faustBridge.process" in processor_cpp
 
 
+def test_codegen_supports_max_sample_rate_flag(template_dir, temp_output_dir, default_context):
+    project_dir = generate(
+        template_dir,
+        temp_output_dir,
+        {**default_context, "include_faust": "yes"},
+    )
+    codegen = (project_dir / "scripts" / "codegen.py").read_text()
+
+    assert "--max-sample-rate" in codegen
+    assert "rewrite_max_delay_constants_for_sample_rate" in codegen
+    # Must not error out when the .dsp has no MAX_* constants (the starter .dsp
+    # doesn't) -- this has to be a no-op, not a hard failure.
+    assert "nothing to resize" in codegen
+
+
+def test_daisy_conditional_enabled(template_dir, temp_output_dir, default_context):
+    project_dir = generate(
+        template_dir,
+        temp_output_dir,
+        {**default_context, "include_faust": "yes", "include_daisy": "yes"},
+    )
+
+    assert (project_dir / "daisy" / "README.md").exists()
+    assert (project_dir / "daisy" / "main.cpp").exists()
+    assert (project_dir / "daisy" / "Makefile").exists()
+
+    justfile = (project_dir / "justfile").read_text()
+    assert "daisy-codegen" in justfile
+    assert "daisy-build" in justfile
+    assert "--max-sample-rate" in justfile
+
+    gitignore = (project_dir / ".gitignore").read_text()
+    assert "daisy/generated/" in gitignore
+    assert "!daisy/Makefile" in gitignore
+
+    docs = (project_dir / "docs" / "faust-codegen.md").read_text()
+    assert "Daisy Seed scaffold" in docs
+
+    main_cpp = (project_dir / "daisy" / "main.cpp").read_text()
+    assert "TestPluginDSP DSY_SDRAM_BSS dsp;" in main_cpp
+    assert "{{cookiecutter" not in main_cpp
+
+
+def test_daisy_conditional_disabled(template_dir, temp_output_dir, default_context):
+    project_dir = generate(
+        template_dir,
+        temp_output_dir,
+        {**default_context, "include_faust": "yes", "include_daisy": "no"},
+    )
+
+    assert not (project_dir / "daisy").exists()
+    assert "daisy-codegen" not in (project_dir / "justfile").read_text()
+
+
+def test_daisy_requires_faust(template_dir, temp_output_dir, default_context):
+    """include_daisy=yes without include_faust=yes should warn and skip, not crash."""
+    project_dir = generate(
+        template_dir,
+        temp_output_dir,
+        {**default_context, "include_faust": "no", "include_daisy": "yes"},
+    )
+
+    assert not (project_dir / "daisy").exists()
+    assert "daisy-codegen" not in (project_dir / "justfile").read_text()
+
+
 def test_faust_conditional_disabled(template_dir, temp_output_dir, default_context):
     project_dir = generate(
         template_dir,

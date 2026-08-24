@@ -13,6 +13,7 @@ Faust or C++ DSP idea reaches every format anyone is likely to ask for.
 - **Preset + A/B architecture** included by default in every generated project.
 - **Advanced UI profile** (`include_advanced_ui`) with custom controls, look-and-feel, and meter visuals.
 - **CLAP support** (`include_clap`) via [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions), fetched at configure time, with real parameter ranges exported to the host.
+- **Daisy Seed scaffold** (`include_daisy`, requires `include_faust`) — an unverified starting point for porting the generated Faust DSP class to embedded hardware, with its own `--max-sample-rate` codegen path and SDRAM-placement guidance.
 ## Usage
 
 ### Prerequisites
@@ -44,6 +45,15 @@ is fetched rather than vendored. Set it to `no` for an offline-buildable project
   clap-juce-extensions dependency is pinned to a commit rather than a tag, because that
   repository's tags are CLAP *spec* versions from 2022 rather than releases — building
   against one silently produces a pre-CLAP-1.0 wrapper.
+- `include_daisy`: adds a `daisy/` scaffold (README, `main.cpp`, `Makefile`) for porting
+  the generated Faust DSP class to a Daisy Seed. Requires `include_faust=yes` — if set
+  without it, generation prints a warning and skips the scaffold. Comes with its own
+  `just daisy-codegen`/`daisy-build`/`daisy-clean` recipes and a `codegen.py
+  --max-sample-rate` flag that resizes any `MAX_* = N; // X ms @ Y kHz` delay-line
+  buffers for the embedded target's fixed rate instead of the desktop build's ceiling.
+  **Unverified** — written without an ARM toolchain or libDaisy available to compile
+  against; treat it as a documented starting point, confirm libDaisy API names against
+  your actual checkout before trusting them.
 
 ## Architecture Notes
 

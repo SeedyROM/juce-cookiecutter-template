@@ -16,6 +16,7 @@
   "include_standalone": "yes",
   "include_clap": "yes",
   "include_faust": "no",
+  "include_daisy": "no",
   "include_advanced_ui": "no",
   "faust_dsp_name": "{{ cookiecutter.plugin_name_lowercase }}",
   "faust_class_name": "{{ cookiecutter.plugin_name }}DSP",

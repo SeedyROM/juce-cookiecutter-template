@@ -53,3 +53,30 @@ After generating `FaustDSP.h`, the script:
 
 1. injects `#include "FaustDefs.h"`
 2. suppresses unused `sample_rate` warnings in Faust helper SIG methods
+
+## Targeting a Different Sample Rate (e.g. an Embedded Build)
+
+Faust has no compiler-define mechanism for injecting a value like a target
+sample rate at compile time (`ma.SR` isn't known until runtime, long after
+codegen runs). If `{{cookiecutter.faust_dsp_name}}.dsp` declares delay-line
+buffers following the convention
+
+```faust
+MAX_SOMETHING = 96000; // 500 ms @ 192 kHz
+```
+
+(a `MAX_*` constant with a `// X ms @ Y kHz` comment), `--max-sample-rate`
+rewrites that constant for a different target ceiling before compiling:
+
+```bash
+python3 scripts/codegen.py dsp/{{cookiecutter.faust_dsp_name}}.dsp \
+    --output src/dsp/generated --max-sample-rate 48000
+```
+
+This is a no-op if no such constants exist yet -- the default starter `.dsp` has
+none. Generated output from a non-default `--max-sample-rate` is stamped with a
+`CUSTOM CODEGEN BUILD` banner so it's never confused with the desktop build's
+committed files.
+{% if cookiecutter.include_daisy == "yes" %}
+See `daisy/README.md` for the Daisy Seed scaffold that uses this flag.
+{% endif %}

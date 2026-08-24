@@ -5,6 +5,7 @@ import shutil
 
 # Flags from cookiecutter.json
 include_faust = "{{ cookiecutter.include_faust }}" == "yes"
+include_daisy = "{{ cookiecutter.include_daisy }}" == "yes"
 include_ci = "{{ cookiecutter.include_ci }}" == "yes"
 include_advanced_ui = "{{ cookiecutter.include_advanced_ui }}" == "yes"
 
@@ -14,6 +15,10 @@ FAUST_PATHS = [
     "src/dsp/generated",
     "scripts/codegen.py",
     "docs/faust-codegen.md",
+]
+
+DAISY_PATHS = [
+    "daisy",
 ]
 
 CI_PATHS = [
@@ -37,6 +42,18 @@ def remove_path(path: str) -> None:
 
 if not include_faust:
     for p in FAUST_PATHS:
+        remove_path(p)
+
+    if include_daisy:
+        print(
+            "[WARNING] include_daisy=yes requires include_faust=yes "
+            "(the Daisy scaffold builds the same generated DSP class the "
+            "plugin uses) -- skipping the Daisy scaffold."
+        )
+        include_daisy = False
+
+if not include_daisy:
+    for p in DAISY_PATHS:
         remove_path(p)
 
 if not include_ci:

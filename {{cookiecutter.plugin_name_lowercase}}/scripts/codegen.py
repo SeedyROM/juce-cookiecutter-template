@@ -89,8 +89,50 @@ def get_sort_key(param: dict[str, Any]) -> int:
     return 99
 
 
+# Matches a "MAX_SOMETHING = N; // X ms @ Y kHz" convention for delay-line buffer
+# constants, if the .dsp source happens to use one (see docs/faust-codegen.md).
+# Not every DSP has delay lines -- this is opt-in via --max-sample-rate, and it's
+# fine for zero matches to mean "nothing to resize" rather than an error.
+MAX_DELAY_LINE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<name>MAX_\w+)(?P<sp>[ \t]*)=[ \t]*\d+;[ \t]*"
+    r"//[ \t]*(?P<ms>\d+)[ \t]*ms[ \t]*@[ \t]*[\d.]+[ \t]*kHz",
+    re.MULTILINE,
+)
+
+
+def rewrite_max_delay_constants_for_sample_rate(source: str, max_sample_rate: int) -> tuple[str, int]:
+    """Resizes MAX_*_DELAY-style buffers for a target max sample rate instead of
+    whatever ceiling the .dsp file's comments assume (typically 192 kHz, sized for
+    an arbitrary desktop DAW session rate).
+
+    Faust has no compiler-define mechanism for injecting a value like this at
+    compile time (`ma.SR` isn't known until runtime, long after codegen runs), so
+    this does the substitution ourselves before the source ever reaches `faust`.
+    Meant for a fixed-sample-rate embedded target (e.g. Daisy Seed at 48 kHz),
+    where carrying a buffer sized for a desktop-worst-case rate wastes memory a
+    fixed-rate target will never need.
+
+    Returns (rewritten_source, number_of_constants_rewritten).
+    """
+    def replace(match: re.Match) -> str:
+        ms = int(match.group("ms"))
+        samples = math.ceil(ms * max_sample_rate / 1000.0)
+        khz = max_sample_rate / 1000.0
+        khz_str = f"{khz:g}"
+        return (
+            f"{match.group('indent')}{match.group('name')}{match.group('sp')}"
+            f"= {samples}; // {ms} ms @ {khz_str} kHz"
+        )
+
+    new_source, count = MAX_DELAY_LINE_RE.subn(replace, source)
+    return new_source, count
+
+
 def run_faust_cpp(
-    dsp_path: str, output_path: str, class_name: str = "{% endraw %}{{ cookiecutter.faust_class_name }}{% raw %}"
+    dsp_path: str,
+    output_path: str,
+    class_name: str = "{% endraw %}{{ cookiecutter.faust_class_name }}{% raw %}",
+    build_note: str | None = None,
 ) -> None:
     cmd = [
         "faust",
@@ -122,15 +164,27 @@ def run_faust_cpp(
         content = f.read()
 
     guard_pattern = f"#define  __{class_name}_H__"
+    faust_defs_include = '#include "FaustDefs.h"'
+    if build_note:
+        # Loud, hard-to-miss marker that this isn't the default desktop build --
+        # the buffer sizes below were resized for a specific target sample rate
+        # and would silently clamp shorter than labeled at any higher rate.
+        faust_defs_include = (
+            "// ==========================================================================\n"
+            f"// CUSTOM CODEGEN BUILD -- {build_note}\n"
+            "// Do not commit this over the default generated output.\n"
+            "// ==========================================================================\n"
+            f"{faust_defs_include}"
+        )
     if guard_pattern in content:
         content = content.replace(
             guard_pattern,
-            f'{guard_pattern}\n\n#include "FaustDefs.h"',
+            f"{guard_pattern}\n\n{faust_defs_include}",
         )
     else:
         content = content.replace(
             "#endif \n\n/* link with",
-            '#include "FaustDefs.h"\n\n#endif \n\n/* link with',
+            f"{faust_defs_include}\n\n#endif \n\n/* link with",
         )
 
     content = re.sub(
@@ -520,29 +574,76 @@ def main():
         action="store_true",
         help="Skip running faust compiler (use existing .json and FaustDSP.h)",
     )
+    parser.add_argument(
+        "--max-sample-rate",
+        type=int,
+        default=None,
+        help=(
+            "Resize any 'MAX_* = N; // X ms @ Y kHz' delay-line buffers in the "
+            ".dsp source for this target sample rate instead of whatever ceiling "
+            "the comments already assume. Use for a fixed-rate embedded target "
+            "(e.g. --max-sample-rate 48000 for a Daisy Seed build) to avoid "
+            "carrying memory sized for a rate that will never occur. No-op if "
+            "the .dsp has no such constants. Omit for the normal desktop build."
+        ),
+    )
     args = parser.parse_args()
 
     dsp_path = os.path.abspath(args.dsp_file)
     output_dir = os.path.abspath(args.output)
-    class_name = args.class_name
+    build_note: str | None = None
+    rewritten_dsp_path: str | None = None
+
+    if args.max_sample_rate is not None:
+        with open(dsp_path, "r") as f:
+            original_source = f.read()
+
+        rewritten_source, rewritten_count = rewrite_max_delay_constants_for_sample_rate(
+            original_source, args.max_sample_rate
+        )
+        if rewritten_count == 0:
+            print(
+                f"[codegen] --max-sample-rate {args.max_sample_rate} given but no "
+                "'MAX_* = N; // X ms @ Y kHz' constants were found -- nothing to resize."
+            )
+        else:
+            rewritten_dsp_path = os.path.join(
+                os.path.dirname(dsp_path), f".codegen-tmp.{os.path.basename(dsp_path)}"
+            )
+            with open(rewritten_dsp_path, "w") as f:
+                f.write(rewritten_source)
+
+            build_note = f"MAX_*_DELAY sized for {args.max_sample_rate} Hz"
+            print(f"[codegen] CUSTOM SAMPLE RATE BUILD: {build_note}")
+
+    # dsp_name feeds the "AUTO-GENERATED from {dsp_name}" banners -- always the
+    # real source file's name, never the temp rewritten copy's.
     dsp_name = os.path.basename(dsp_path)
+    if rewritten_dsp_path is not None:
+        dsp_path = rewritten_dsp_path
+
+    class_name = args.class_name
 
     os.makedirs(output_dir, exist_ok=True)
 
-    faust_dsp_h = os.path.join(output_dir, "FaustDSP.h")
-    if not args.skip_faust:
-        print("[codegen] Running Faust compiler...")
-        run_faust_cpp(dsp_path, faust_dsp_h, class_name)
+    try:
+        faust_dsp_h = os.path.join(output_dir, "FaustDSP.h")
+        if not args.skip_faust:
+            print("[codegen] Running Faust compiler...")
+            run_faust_cpp(dsp_path, faust_dsp_h, class_name, build_note=build_note)
 
-        print("[codegen] Generating Faust JSON metadata...")
-        json_path = run_faust_json(dsp_path, output_dir)
-    else:
-        json_path = os.path.join(output_dir, os.path.basename(dsp_path) + ".json")
-        print(f"[codegen] Skipping Faust compiler, reading existing {json_path}")
+            print("[codegen] Generating Faust JSON metadata...")
+            json_path = run_faust_json(dsp_path, output_dir)
+        else:
+            json_path = os.path.join(output_dir, os.path.basename(dsp_path) + ".json")
+            print(f"[codegen] Skipping Faust compiler, reading existing {json_path}")
 
-    print(f"[codegen] Reading {json_path}...")
-    with open(json_path, "r") as f:
-        faust_json = json.load(f)
+        print(f"[codegen] Reading {json_path}...")
+        with open(json_path, "r") as f:
+            faust_json = json.load(f)
+    finally:
+        if rewritten_dsp_path is not None and os.path.exists(rewritten_dsp_path):
+            os.remove(rewritten_dsp_path)
 
     ui_tree = faust_json.get("ui", [])
     params = extract_params(ui_tree)

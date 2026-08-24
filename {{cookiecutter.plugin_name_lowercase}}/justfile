@@ -22,6 +22,25 @@ default:
 codegen:
     python3 scripts/codegen.py {% raw %}{{dsp_source}}{% endraw %} --output {% raw %}{{gen_dir}}{% endraw %}
 {% endif %}
+{% if cookiecutter.include_daisy == "yes" and cookiecutter.include_faust == "yes" -%}
+daisy_max_sample_rate := "48000"
+daisy_dir := "daisy"
+daisy_gen_dir := "daisy/generated"
+
+# Regenerate the Faust DSP for the Daisy target's fixed sample rate (not the
+# desktop plugin's 192kHz-worst-case buffers -- see daisy/README.md).
+daisy-codegen:
+    python3 scripts/codegen.py {% raw %}{{dsp_source}}{% endraw %} --output {% raw %}{{daisy_gen_dir}}{% endraw %} --max-sample-rate {% raw %}{{daisy_max_sample_rate}}{% endraw %}
+
+# Build the Daisy Seed firmware. Requires libDaisy + arm-none-eabi-gcc; set
+# LIBDAISY_DIR in daisy/Makefile (or pass it to `make`) first.
+daisy-build: daisy-codegen
+    cd {% raw %}{{daisy_dir}}{% endraw %} && make
+
+daisy-clean:
+    rm -rf {% raw %}{{daisy_gen_dir}}{% endraw %}
+    cd {% raw %}{{daisy_dir}}{% endraw %} && make clean
+{% endif %}
 
 configure *flags:
     @enable_vst2="{% raw %}{{plugin_enable_vst2}}{% endraw %}"; formats='{% raw %}{{plugin_formats}}{% endraw %}'; enable_codegen="{% raw %}{{plugin_enable_codegen}}{% endraw %}"; for flag in {% raw %}{{flags}}{% endraw %}; do if [ "$flag" = "--enable-vst2" ]; then enable_vst2=ON; formats="VST VST3 AU Standalone"; {% if cookiecutter.include_faust == "yes" %}elif [ "$flag" = "--enable-codegen" ]; then enable_codegen=ON; {% endif %}else echo "Unknown flag: $flag" >&2; exit 1; fi; done; cmake -B {% raw %}{{build_dir}}{% endraw %} -G Ninja -DCMAKE_BUILD_TYPE={% raw %}{{build_type}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_FORMATS="$formats" -D{{cookiecutter.plugin_name | upper}}_COPY_AFTER_BUILD={% raw %}{{plugin_copy_after_build}}{% endraw %} -D{{cookiecutter.plugin_name | upper}}_USE_MARCH_NATIVE=ON {% if cookiecutter.include_clap == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_CLAP={% raw %}{{plugin_enable_clap}}{% endraw %} {% endif %}{% if cookiecutter.include_vst2 == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_VST2=$enable_vst2 {% endif %}{% if cookiecutter.include_faust == "yes" %}-D{{cookiecutter.plugin_name | upper}}_ENABLE_CODEGEN=$enable_codegen{% endif %}

@@ -23,6 +23,16 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 _deps
+{% if cookiecutter.include_daisy == "yes" and cookiecutter.include_faust == "yes" -%}
+# The bare "Makefile" rule above is for CMake's generated build-dir Makefiles;
+# daisy/Makefile is a real, checked-in project file.
+!daisy/Makefile
+
+# Daisy codegen output is sized for the embedded target's fixed sample rate
+# (see daisy/README.md) -- never mix it with the desktop's src/dsp/generated/.
+daisy/generated/
+daisy/build/
+{% endif %}
 
 # IDE
 .vscode/**/*
